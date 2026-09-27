@@ -1,0 +1,5 @@
+Looking in indexes: https://pypi.org/simple, https://d33sy5i8bnduwe.cloudfront.net/simple/
+Requirement already satisfied: starlette in /root/.venv/lib/python3.11/site-packages (0.37.2)
+Requirement already satisfied: anyio<5,>=3.4.0 in /root/.venv/lib/python3.11/site-packages (from starlette) (4.12.1)
+Requirement already satisfied: idna>=2.8 in /root/.venv/lib/python3.11/site-packages (from anyio<5,>=3.4.0->starlette) (3.11)
+Requirement already satisfied: typing_extensions>=4.5 in /root/.venv/lib/python3.11/site-packages (from anyio<5,>=3.4.0->starlette) (4.15.0)
