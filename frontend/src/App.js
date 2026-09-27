@@ -5,24 +5,11 @@ import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import { 
-  Terminal, 
-  Search, 
-  ShieldAlert, 
-  PenTool, 
-  Play, 
-  Loader2,
-  AlertTriangle,
-  CheckCircle2,
-  Clock,
-  Zap,
-  History,
-  Download,
-  FileText,
-  FileJson,
-  Trash2,
-  ArrowLeft,
-  RefreshCw,
-  XCircle
+  Terminal, Search, ShieldAlert, PenTool, Play, Loader2,
+  AlertTriangle, CheckCircle2, Clock, Zap, History, Download,
+  FileText, FileJson, FileDown, Trash2, RefreshCw, XCircle,
+  TrendingUp, Cpu, FlaskConical, Scale, BarChart3, Target,
+  Sparkles, Rocket, Award, Shield, Info
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,26 +17,56 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader,
+  AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
+
+// Icon mapping for templates
+const TEMPLATE_ICONS = {
+  'trending-up': TrendingUp,
+  'cpu': Cpu,
+  'flask': FlaskConical,
+  'scale': Scale,
+  'chart': BarChart3,
+  'target': Target
+};
+
+// Credibility Badge Component
+const CredibilityBadge = ({ score, level, size = 'sm' }) => {
+  const getColor = () => {
+    if (score >= 80) return { bg: 'bg-status-active/20', text: 'text-status-active', border: 'border-status-active/30' };
+    if (score >= 60) return { bg: 'bg-fact-checker/20', text: 'text-fact-checker', border: 'border-fact-checker/30' };
+    if (score >= 40) return { bg: 'bg-status-warning/20', text: 'text-status-warning', border: 'border-status-warning/30' };
+    return { bg: 'bg-status-error/20', text: 'text-status-error', border: 'border-status-error/30' };
+  };
+  
+  const colors = getColor();
+  const label = level ? level.replace('-', ' ') : 'unknown';
+  
+  return (
+    <Badge 
+      variant="outline" 
+      className={`${colors.bg} ${colors.text} ${colors.border} ${size === 'lg' ? 'text-sm px-3 py-1' : ''}`}
+      data-testid="credibility-badge"
+    >
+      <Shield className={`${size === 'lg' ? 'w-4 h-4' : 'w-3 h-3'} mr-1`} />
+      {score}/100 {label !== 'unknown' && `- ${label}`}
+    </Badge>
+  );
+};
 
 // Terminal Feed Component
 const TerminalFeed = ({ logs, agentColor, isActive }) => {
@@ -78,7 +95,6 @@ const TerminalFeed = ({ logs, agentColor, isActive }) => {
             animate={{ opacity: 1, x: 0 }}
             transition={{ duration: 0.15 }}
             className="flex gap-2"
-            data-testid="terminal-log-entry"
           >
             <span className="text-zinc-600 select-none">[{log.time}]</span>
             <span style={{ color: log.type === 'error' ? '#ef4444' : agentColor }}>
@@ -98,15 +114,7 @@ const TerminalFeed = ({ logs, agentColor, isActive }) => {
 };
 
 // Agent Card Component
-const AgentCard = ({ 
-  title, 
-  icon: Icon, 
-  color, 
-  status, 
-  logs, 
-  description,
-  testId 
-}) => {
+const AgentCard = ({ title, icon: Icon, color, status, logs, description, testId }) => {
   const isActive = status === 'active';
   const isComplete = status === 'complete';
   const isIdle = status === 'idle';
@@ -119,34 +127,18 @@ const AgentCard = ({
   return (
     <motion.div
       layout
-      className={`
-        bg-zinc-900 border border-zinc-800 p-6 rounded-lg relative overflow-hidden
-        transition-opacity duration-300
-        ${isIdle ? 'opacity-50' : 'opacity-100'}
-        ${glowClass}
-      `}
+      className={`bg-zinc-900 border border-zinc-800 p-6 rounded-lg relative overflow-hidden transition-opacity duration-300 ${isIdle ? 'opacity-50' : 'opacity-100'} ${glowClass}`}
       data-testid={testId}
     >
-      {/* Tracing beam effect when active */}
       {isActive && (
-        <motion.div
-          className="absolute inset-0 pointer-events-none"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-        >
-          <div 
-            className="absolute inset-x-0 top-0 h-[2px] tracing-beam"
-            style={{ '--beam-color': color }}
-          />
+        <motion.div className="absolute inset-0 pointer-events-none" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+          <div className="absolute inset-x-0 top-0 h-[2px] tracing-beam" style={{ '--beam-color': color }} />
         </motion.div>
       )}
 
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
-          <div 
-            className="p-2 rounded-lg"
-            style={{ backgroundColor: `${color}20` }}
-          >
+          <div className="p-2 rounded-lg" style={{ backgroundColor: `${color}20` }}>
             <Icon className="w-5 h-5" style={{ color }} />
           </div>
           <div>
@@ -156,10 +148,7 @@ const AgentCard = ({
         </div>
         <Badge 
           variant={isActive ? 'default' : isComplete ? 'secondary' : 'outline'}
-          className={`
-            ${isActive ? 'bg-status-active text-white animate-pulse-glow' : ''}
-            ${isComplete ? 'bg-zinc-700 text-zinc-300' : ''}
-          `}
+          className={`${isActive ? 'bg-status-active text-white animate-pulse-glow' : ''} ${isComplete ? 'bg-zinc-700 text-zinc-300' : ''}`}
         >
           {isActive && <Loader2 className="w-3 h-3 mr-1 animate-spin" />}
           {isComplete && <CheckCircle2 className="w-3 h-3 mr-1" />}
@@ -189,7 +178,6 @@ const ProcessFlow = ({ currentStep, progress }) => {
 
   return (
     <div className="my-8 space-y-4" data-testid="process-flow">
-      {/* Progress Bar */}
       {progress > 0 && progress < 100 && (
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between mb-2">
@@ -200,8 +188,7 @@ const ProcessFlow = ({ currentStep, progress }) => {
         </div>
       )}
       
-      {/* Step Indicators */}
-      <div className="flex items-center justify-center gap-2">
+      <div className="flex items-center justify-center gap-2 flex-wrap">
         {steps.map((step, index) => {
           const status = getStepStatus(index);
           const Icon = step.icon;
@@ -209,12 +196,7 @@ const ProcessFlow = ({ currentStep, progress }) => {
           return (
             <div key={step.name} className="flex items-center">
               <motion.div
-                className={`
-                  flex items-center gap-2 px-4 py-2 rounded-full border
-                  ${status === 'complete' ? 'border-zinc-600 bg-zinc-800' : ''}
-                  ${status === 'active' ? 'border-2' : ''}
-                  ${status === 'idle' ? 'border-zinc-800 bg-zinc-900/50 opacity-50' : ''}
-                `}
+                className={`flex items-center gap-2 px-4 py-2 rounded-full border ${status === 'complete' ? 'border-zinc-600 bg-zinc-800' : ''} ${status === 'active' ? 'border-2' : ''} ${status === 'idle' ? 'border-zinc-800 bg-zinc-900/50 opacity-50' : ''}`}
                 style={{ 
                   borderColor: status === 'active' ? step.color : undefined,
                   boxShadow: status === 'active' ? `0 0 15px -3px ${step.color}` : undefined
@@ -222,28 +204,15 @@ const ProcessFlow = ({ currentStep, progress }) => {
                 animate={status === 'active' ? { scale: [1, 1.02, 1] } : {}}
                 transition={{ duration: 2, repeat: Infinity }}
               >
-                <Icon 
-                  className="w-4 h-4" 
-                  style={{ color: status !== 'idle' ? step.color : '#71717a' }} 
-                />
-                <span 
-                  className="text-sm font-medium"
-                  style={{ color: status !== 'idle' ? '#fafafa' : '#71717a' }}
-                >
+                <Icon className="w-4 h-4" style={{ color: status !== 'idle' ? step.color : '#71717a' }} />
+                <span className="text-sm font-medium" style={{ color: status !== 'idle' ? '#fafafa' : '#71717a' }}>
                   {step.name}
                 </span>
-                {status === 'complete' && (
-                  <CheckCircle2 className="w-4 h-4 text-status-active" />
-                )}
+                {status === 'complete' && <CheckCircle2 className="w-4 h-4 text-status-active" />}
               </motion.div>
               {index < steps.length - 1 && (
                 <div className="w-8 h-0.5 mx-2">
-                  <div 
-                    className="h-full rounded transition-colors duration-500"
-                    style={{ 
-                      backgroundColor: currentStep > index ? step.color : '#27272a'
-                    }}
-                  />
+                  <div className="h-full rounded transition-colors duration-500" style={{ backgroundColor: currentStep > index ? step.color : '#27272a' }} />
                 </div>
               )}
             </div>
@@ -265,7 +234,8 @@ const ExportMenu = ({ sessionId, disabled }) => {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `research-report-${sessionId.slice(0, 8)}.${format === 'markdown' ? 'md' : 'json'}`;
+      const ext = format === 'markdown' ? 'md' : format;
+      a.download = `research-report-${sessionId.slice(0, 8)}.${ext}`;
       document.body.appendChild(a);
       a.click();
       window.URL.revokeObjectURL(url);
@@ -286,6 +256,10 @@ const ExportMenu = ({ sessionId, disabled }) => {
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent>
+        <DropdownMenuItem onClick={() => handleExport('pdf')} data-testid="export-pdf">
+          <FileDown className="w-4 h-4 mr-2" />
+          Export as PDF
+        </DropdownMenuItem>
         <DropdownMenuItem onClick={() => handleExport('markdown')}>
           <FileText className="w-4 h-4 mr-2" />
           Export as Markdown
@@ -296,6 +270,101 @@ const ExportMenu = ({ sessionId, disabled }) => {
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+};
+
+// Templates Grid Component
+const TemplatesGrid = ({ onSelectTemplate }) => {
+  const [templates, setTemplates] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  useEffect(() => {
+    fetch(`${API}/templates`)
+      .then(res => res.json())
+      .then(data => {
+        setTemplates(data.templates || []);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
+  }, []);
+  
+  if (loading || templates.length === 0) return null;
+  
+  return (
+    <div className="mb-6" data-testid="templates-grid">
+      <div className="flex items-center gap-2 mb-3">
+        <Sparkles className="w-4 h-4 text-primary" />
+        <h3 className="text-sm font-medium text-zinc-300">Quick Start Templates</h3>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {templates.map((template) => {
+          const Icon = TEMPLATE_ICONS[template.icon] || FileText;
+          return (
+            <motion.button
+              key={template.id}
+              onClick={() => onSelectTemplate(template)}
+              className="p-3 bg-zinc-900 border border-zinc-800 rounded-lg hover:border-primary/50 hover:bg-zinc-800/50 transition-colors text-left group"
+              whileHover={{ y: -2 }}
+              whileTap={{ scale: 0.98 }}
+              data-testid={`template-${template.id}`}
+            >
+              <Icon className="w-5 h-5 text-zinc-400 group-hover:text-primary mb-2 transition-colors" />
+              <p className="text-xs font-medium text-zinc-200 mb-1">{template.name}</p>
+              <p className="text-[10px] text-zinc-500 leading-tight">{template.description}</p>
+            </motion.button>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
+// Sources Panel Component
+const SourcesPanel = ({ sources, credibilityScore }) => {
+  if (!sources || sources.length === 0) return null;
+  
+  return (
+    <Card className="bg-zinc-900 border-zinc-800" data-testid="sources-panel">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="flex items-center gap-2 text-lg text-researcher">
+            <Shield className="w-5 h-5" />
+            Source Credibility Analysis
+          </CardTitle>
+          {credibilityScore !== null && credibilityScore !== undefined && (
+            <CredibilityBadge score={credibilityScore} level={credibilityScore >= 80 ? 'high' : credibilityScore >= 60 ? 'medium' : 'low'} size="lg" />
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="space-y-3">
+          {sources.map((source, idx) => (
+            <div key={idx} className="p-3 bg-zinc-950 rounded-lg border border-zinc-800">
+              <div className="flex items-start justify-between gap-3 mb-2">
+                <a
+                  href={source.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-researcher hover:underline break-all flex-1"
+                >
+                  {source.url}
+                </a>
+                <CredibilityBadge score={source.credibility_score} level={source.credibility_level} />
+              </div>
+              {source.reasons && source.reasons.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  {source.reasons.map((reason, ridx) => (
+                    <span key={ridx} className="text-[10px] text-zinc-500 bg-zinc-900 px-2 py-0.5 rounded">
+                      {reason}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 
@@ -310,12 +379,12 @@ const ResultsPanel = ({ session, isVisible }) => {
       className="mt-8 space-y-6"
       data-testid="results-panel"
     >
-      {/* Export Actions */}
       <div className="flex justify-end">
         <ExportMenu sessionId={session.id} disabled={false} />
       </div>
 
-      {/* Contradictions Found */}
+      <SourcesPanel sources={session.sources} credibilityScore={session.credibility_score} />
+
       {session.contradictions_found && session.contradictions_found.length > 0 && (
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader className="pb-3">
@@ -337,7 +406,6 @@ const ResultsPanel = ({ session, isVisible }) => {
         </Card>
       )}
 
-      {/* Final Report */}
       {session.final_report && (
         <Card className="bg-zinc-900 border-zinc-800">
           <CardHeader className="pb-3">
@@ -366,20 +434,13 @@ const Navigation = () => {
   return (
     <nav className="flex items-center gap-4 mb-8">
       <Link to="/">
-        <Button 
-          variant={location.pathname === '/' ? 'default' : 'ghost'}
-          size="sm"
-        >
+        <Button variant={location.pathname === '/' ? 'default' : 'ghost'} size="sm">
           <Zap className="w-4 h-4 mr-2" />
           New Research
         </Button>
       </Link>
       <Link to="/history">
-        <Button 
-          variant={location.pathname === '/history' ? 'default' : 'ghost'}
-          size="sm"
-          data-testid="nav-history"
-        >
+        <Button variant={location.pathname === '/history' ? 'default' : 'ghost'} size="sm" data-testid="nav-history">
           <History className="w-4 h-4 mr-2" />
           History
         </Button>
@@ -415,15 +476,11 @@ const HistoryPage = () => {
 
   const handleDelete = async (sessionId) => {
     try {
-      const response = await fetch(`${API}/research/${sessionId}`, {
-        method: 'DELETE'
-      });
+      const response = await fetch(`${API}/research/${sessionId}`, { method: 'DELETE' });
       if (response.ok) {
         toast.success('Session deleted');
         fetchSessions();
-        if (selectedSession?.id === sessionId) {
-          setSelectedSession(null);
-        }
+        if (selectedSession?.id === sessionId) setSelectedSession(null);
       }
     } catch (error) {
       toast.error('Delete failed');
@@ -432,31 +489,21 @@ const HistoryPage = () => {
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'completed':
-        return <CheckCircle2 className="w-4 h-4 text-status-active" />;
-      case 'error':
-        return <XCircle className="w-4 h-4 text-status-error" />;
-      case 'researching':
-      case 'fact_checking':
-      case 'writing':
+      case 'completed': return <CheckCircle2 className="w-4 h-4 text-status-active" />;
+      case 'error': return <XCircle className="w-4 h-4 text-status-error" />;
+      case 'researching': case 'fact_checking': case 'writing':
         return <Loader2 className="w-4 h-4 text-researcher animate-spin" />;
-      default:
-        return <Clock className="w-4 h-4 text-status-idle" />;
+      default: return <Clock className="w-4 h-4 text-status-idle" />;
     }
   };
 
   const getStatusColor = (status) => {
     switch (status) {
-      case 'completed':
-        return 'bg-status-active/20 text-status-active border-status-active/30';
-      case 'error':
-        return 'bg-status-error/20 text-status-error border-status-error/30';
-      case 'researching':
-      case 'fact_checking':
-      case 'writing':
+      case 'completed': return 'bg-status-active/20 text-status-active border-status-active/30';
+      case 'error': return 'bg-status-error/20 text-status-error border-status-error/30';
+      case 'researching': case 'fact_checking': case 'writing':
         return 'bg-researcher/20 text-researcher border-researcher/30';
-      default:
-        return 'bg-zinc-700/20 text-zinc-400 border-zinc-600/30';
+      default: return 'bg-zinc-700/20 text-zinc-400 border-zinc-600/30';
     }
   };
 
@@ -469,25 +516,19 @@ const HistoryPage = () => {
   return (
     <div className="min-h-screen bg-[#09090b] text-zinc-100">
       <div className="max-w-7xl mx-auto p-4 md:p-8">
-        {/* Header */}
         <header className="mb-8">
           <div className="flex items-center gap-3 mb-2">
             <div className="p-2 rounded-lg bg-primary/20">
               <Zap className="w-6 h-6 text-primary" />
             </div>
-            <h1 className="text-4xl font-bold tracking-tight text-zinc-100">
-              MARS
-            </h1>
+            <h1 className="text-4xl font-bold tracking-tight text-zinc-100">MARS</h1>
           </div>
-          <p className="text-zinc-400 text-sm ml-14">
-            Multi-Agent Research System — Research History
-          </p>
+          <p className="text-zinc-400 text-sm ml-14">Multi-Agent Research System — Research History</p>
         </header>
 
         <Navigation />
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Sessions List */}
           <div className="lg:col-span-1">
             <Card className="bg-zinc-900 border-zinc-800">
               <CardHeader className="pb-3">
@@ -508,35 +549,30 @@ const HistoryPage = () => {
                       <Loader2 className="w-6 h-6 animate-spin text-zinc-400" />
                     </div>
                   ) : sessions.length === 0 ? (
-                    <div className="text-center py-8 text-zinc-500">
-                      No research sessions yet
-                    </div>
+                    <div className="text-center py-8 text-zinc-500">No research sessions yet</div>
                   ) : (
                     <div className="space-y-2">
                       {sessions.map((session) => (
                         <div
                           key={session.id}
-                          className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                            selectedSession?.id === session.id
-                              ? 'bg-zinc-800 border-zinc-600'
-                              : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800/50'
-                          }`}
+                          className={`p-3 rounded-lg border cursor-pointer transition-colors ${selectedSession?.id === session.id ? 'bg-zinc-800 border-zinc-600' : 'bg-zinc-900 border-zinc-800 hover:bg-zinc-800/50'}`}
                           onClick={() => setSelectedSession(session)}
                           data-testid="history-session-item"
                         >
                           <div className="flex items-start justify-between gap-2">
                             <div className="flex-1 min-w-0">
-                              <p className="text-sm font-medium text-zinc-200 truncate">
-                                {session.topic}
-                              </p>
-                              <p className="text-xs text-zinc-500 mt-1">
-                                {formatDate(session.created_at)}
-                              </p>
+                              <p className="text-sm font-medium text-zinc-200 truncate">{session.topic}</p>
+                              <p className="text-xs text-zinc-500 mt-1">{formatDate(session.created_at)}</p>
+                              {session.credibility_score !== null && session.credibility_score !== undefined && session.credibility_score > 0 && (
+                                <div className="mt-1">
+                                  <CredibilityBadge 
+                                    score={session.credibility_score} 
+                                    level={session.credibility_score >= 80 ? 'high' : session.credibility_score >= 60 ? 'medium' : 'low'} 
+                                  />
+                                </div>
+                              )}
                             </div>
-                            <Badge 
-                              variant="outline" 
-                              className={`shrink-0 ${getStatusColor(session.status)}`}
-                            >
+                            <Badge variant="outline" className={`shrink-0 ${getStatusColor(session.status)}`}>
                               {getStatusIcon(session.status)}
                               <span className="ml-1 capitalize">{session.status}</span>
                             </Badge>
@@ -553,7 +589,6 @@ const HistoryPage = () => {
             </Card>
           </div>
 
-          {/* Session Details */}
           <div className="lg:col-span-2">
             {selectedSession ? (
               <Card className="bg-zinc-900 border-zinc-800">
@@ -563,9 +598,7 @@ const HistoryPage = () => {
                       <CardTitle className="text-lg">{selectedSession.topic}</CardTitle>
                       <p className="text-xs text-zinc-500 mt-1">
                         Created: {formatDate(selectedSession.created_at)}
-                        {selectedSession.completed_at && (
-                          <> • Completed: {formatDate(selectedSession.completed_at)}</>
-                        )}
+                        {selectedSession.completed_at && (<> • Completed: {formatDate(selectedSession.completed_at)}</>)}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
@@ -585,9 +618,7 @@ const HistoryPage = () => {
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Cancel</AlertDialogCancel>
-                            <AlertDialogAction onClick={() => handleDelete(selectedSession.id)}>
-                              Delete
-                            </AlertDialogAction>
+                            <AlertDialogAction onClick={() => handleDelete(selectedSession.id)}>Delete</AlertDialogAction>
                           </AlertDialogFooter>
                         </AlertDialogContent>
                       </AlertDialog>
@@ -596,7 +627,6 @@ const HistoryPage = () => {
                 </CardHeader>
                 <CardContent>
                   <ScrollArea className="h-[550px] pr-4">
-                    {/* Error Message */}
                     {selectedSession.status === 'error' && selectedSession.error_message && (
                       <div className="mb-6 p-4 rounded-lg bg-status-error/10 border border-status-error/30">
                         <div className="flex items-start gap-2">
@@ -609,7 +639,25 @@ const HistoryPage = () => {
                       </div>
                     )}
 
-                    {/* Contradictions */}
+                    {selectedSession.sources && selectedSession.sources.length > 0 && (
+                      <div className="mb-6">
+                        <h4 className="text-sm font-medium text-researcher mb-2 flex items-center gap-2">
+                          <Shield className="w-4 h-4" />
+                          Sources ({selectedSession.credibility_score}/100)
+                        </h4>
+                        <div className="space-y-2">
+                          {selectedSession.sources.map((src, idx) => (
+                            <div key={idx} className="p-2 bg-zinc-950 rounded border border-zinc-800 flex items-center justify-between gap-2">
+                              <a href={src.url} target="_blank" rel="noopener noreferrer" className="text-xs text-researcher hover:underline break-all flex-1">
+                                {src.url}
+                              </a>
+                              <CredibilityBadge score={src.credibility_score} level={src.credibility_level} />
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {selectedSession.contradictions_found && selectedSession.contradictions_found.length > 0 && (
                       <div className="mb-6">
                         <h4 className="text-sm font-medium text-fact-checker mb-2 flex items-center gap-2">
@@ -627,7 +675,6 @@ const HistoryPage = () => {
                       </div>
                     )}
 
-                    {/* Final Report */}
                     {selectedSession.final_report && (
                       <div className="mb-6">
                         <h4 className="text-sm font-medium text-writer mb-2 flex items-center gap-2">
@@ -640,7 +687,6 @@ const HistoryPage = () => {
                       </div>
                     )}
 
-                    {/* Researcher Output */}
                     {selectedSession.researcher_output && (
                       <div className="mb-6">
                         <h4 className="text-sm font-medium text-researcher mb-2 flex items-center gap-2">
@@ -653,7 +699,6 @@ const HistoryPage = () => {
                       </div>
                     )}
 
-                    {/* Fact-Checker Output */}
                     {selectedSession.fact_checker_output && (
                       <div className="mb-6">
                         <h4 className="text-sm font-medium text-fact-checker mb-2 flex items-center gap-2">
@@ -666,12 +711,9 @@ const HistoryPage = () => {
                       </div>
                     )}
 
-                    {/* Empty State */}
                     {!selectedSession.final_report && !selectedSession.error_message && (
                       <div className="text-center py-8 text-zinc-500">
-                        {selectedSession.status === 'pending' ? (
-                          'Research has not started yet'
-                        ) : (
+                        {selectedSession.status === 'pending' ? 'Research has not started yet' : (
                           <div className="flex flex-col items-center gap-2">
                             <Loader2 className="w-6 h-6 animate-spin" />
                             <span>Research in progress...</span>
@@ -696,7 +738,6 @@ const HistoryPage = () => {
           </div>
         </div>
 
-        {/* Footer */}
         <footer className="mt-12 pt-6 border-t border-zinc-800 text-center">
           <p className="text-xs text-zinc-600">
             Powered by CrewAI + GPT-5.2 Thinking • Sequential Process Architecture
@@ -712,30 +753,16 @@ const HistoryPage = () => {
 const Dashboard = () => {
   const [topic, setTopic] = useState('The impact of room-temperature superconductors on 2026 energy grids');
   const [isResearching, setIsResearching] = useState(false);
+  const [fastMode, setFastMode] = useState(true);
   const [currentSession, setCurrentSession] = useState(null);
   const [currentStep, setCurrentStep] = useState(-1);
   const [progress, setProgress] = useState(0);
-  const [agentLogs, setAgentLogs] = useState({
-    researcher: [],
-    fact_checker: [],
-    writer: []
-  });
-  const [agentStatus, setAgentStatus] = useState({
-    researcher: 'idle',
-    fact_checker: 'idle',
-    writer: 'idle'
-  });
+  const [agentLogs, setAgentLogs] = useState({ researcher: [], fact_checker: [], writer: [] });
+  const [agentStatus, setAgentStatus] = useState({ researcher: 'idle', fact_checker: 'idle', writer: 'idle' });
   const eventSourceRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
 
-  const getTime = () => {
-    return new Date().toLocaleTimeString('en-US', { 
-      hour12: false, 
-      hour: '2-digit', 
-      minute: '2-digit', 
-      second: '2-digit' 
-    });
-  };
+  const getTime = () => new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
   const addLog = useCallback((agent, message, type = 'info') => {
     setAgentLogs(prev => ({
@@ -744,10 +771,13 @@ const Dashboard = () => {
     }));
   }, []);
 
+  const handleSelectTemplate = (template) => {
+    setTopic(template.prompt);
+    toast.success(`Loaded template: ${template.name}`, { duration: 2000 });
+  };
+
   const connectToStream = useCallback((sessionId) => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
+    if (eventSourceRef.current) eventSourceRef.current.close();
 
     const eventSource = new EventSource(`${API}/research/stream/${sessionId}`);
     eventSourceRef.current = eventSource;
@@ -760,21 +790,15 @@ const Dashboard = () => {
           case 'connected':
             addLog('researcher', 'Connected to research stream');
             break;
-          
           case 'status':
             addLog('researcher', eventData.message);
             break;
-
           case 'progress':
             setProgress(eventData.data?.progress || 0);
             break;
-
           case 'log':
-            if (eventData.agent) {
-              addLog(eventData.agent, eventData.message);
-            }
+            if (eventData.agent) addLog(eventData.agent, eventData.message);
             break;
-
           case 'agent_start':
             if (eventData.agent === 'researcher') {
               setCurrentStep(0);
@@ -782,64 +806,48 @@ const Dashboard = () => {
               addLog('researcher', eventData.message);
             } else if (eventData.agent === 'fact_checker') {
               setCurrentStep(1);
-              setAgentStatus(prev => ({ 
-                ...prev, 
-                researcher: 'complete', 
-                fact_checker: 'active' 
-              }));
+              setAgentStatus(prev => ({ ...prev, researcher: 'complete', fact_checker: 'active' }));
               addLog('fact_checker', eventData.message);
               addLog('fact_checker', 'Aggressive scrutiny mode engaged...');
             } else if (eventData.agent === 'writer') {
               setCurrentStep(2);
-              setAgentStatus(prev => ({ 
-                ...prev, 
-                fact_checker: 'complete', 
-                writer: 'active' 
-              }));
+              setAgentStatus(prev => ({ ...prev, fact_checker: 'complete', writer: 'active' }));
               addLog('writer', eventData.message);
             }
             break;
-
           case 'agent_complete':
             if (eventData.agent === 'researcher') {
               addLog('researcher', 'Research phase completed');
-              addLog('researcher', 'Found sources and compiled findings');
+              if (eventData.data?.sources_count) {
+                addLog('researcher', `Found ${eventData.data.sources_count} sources (credibility: ${eventData.data.credibility_score}/100)`);
+              }
               if (eventData.data?.output) {
-                const preview = eventData.data.output.substring(0, 200);
-                addLog('researcher', `Preview: ${preview}...`);
+                addLog('researcher', `Preview: ${eventData.data.output.substring(0, 200)}...`);
               }
             } else if (eventData.agent === 'fact_checker') {
               addLog('fact_checker', 'Critical analysis completed');
-              addLog('fact_checker', 'Issues identified - proceeding with caution');
+              addLog('fact_checker', 'Issues identified - proceeding');
               if (eventData.data?.output) {
-                const preview = eventData.data.output.substring(0, 200);
-                addLog('fact_checker', `Analysis: ${preview}...`);
+                addLog('fact_checker', `Analysis: ${eventData.data.output.substring(0, 200)}...`);
               }
             } else if (eventData.agent === 'writer') {
               addLog('writer', 'Final report drafted');
               if (eventData.data?.output) {
-                const preview = eventData.data.output.substring(0, 200);
-                addLog('writer', `Summary: ${preview}...`);
+                addLog('writer', `Summary: ${eventData.data.output.substring(0, 200)}...`);
               }
             }
             break;
-
           case 'complete':
           case 'completed':
             setCurrentStep(3);
             setProgress(100);
-            setAgentStatus({ 
-              researcher: 'complete', 
-              fact_checker: 'complete', 
-              writer: 'complete' 
-            });
+            setAgentStatus({ researcher: 'complete', fact_checker: 'complete', writer: 'complete' });
             addLog('writer', 'Research complete! Final report ready.');
             setIsResearching(false);
             toast.success('Research completed successfully!');
             fetchSession(sessionId);
             eventSource.close();
             break;
-
           case 'error':
             addLog('researcher', `Error: ${eventData.message}`, 'error');
             setIsResearching(false);
@@ -847,11 +855,8 @@ const Dashboard = () => {
             toast.error(eventData.message || 'Research failed');
             eventSource.close();
             break;
-
           case 'heartbeat':
-            // Silent heartbeat - connection is alive
             break;
-
           default:
             break;
         }
@@ -864,14 +869,9 @@ const Dashboard = () => {
       addLog('researcher', 'Connection interrupted, attempting to reconnect...', 'error');
       eventSource.close();
       
-      // Attempt reconnection after delay
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = setTimeout(() => {
-        if (isResearching) {
-          connectToStream(sessionId);
-        }
+        if (isResearching) connectToStream(sessionId);
       }, 3000);
     };
   }, [addLog, isResearching]);
@@ -882,7 +882,6 @@ const Dashboard = () => {
       return;
     }
 
-    // Reset state
     setIsResearching(true);
     setCurrentStep(0);
     setProgress(0);
@@ -891,23 +890,20 @@ const Dashboard = () => {
     setAgentStatus({ researcher: 'active', fact_checker: 'idle', writer: 'idle' });
 
     try {
-      // Start research session
       const response = await fetch(`${API}/research/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ topic })
+        body: JSON.stringify({ topic, fast_mode: fastMode })
       });
 
       if (!response.ok) throw new Error('Failed to start research');
       
       const data = await response.json();
-      toast.success('Research started!');
-      addLog('researcher', `Starting research on: "${topic}"`);
+      toast.success(fastMode ? 'Research started (Fast Mode)!' : 'Research started!');
+      addLog('researcher', `Starting ${fastMode ? 'FAST ' : ''}research on: "${topic}"`);
       addLog('researcher', 'Searching for credible sources...');
 
-      // Connect to SSE stream
       connectToStream(data.session_id);
-
     } catch (error) {
       console.error('Research error:', error);
       toast.error('Failed to start research');
@@ -927,126 +923,132 @@ const Dashboard = () => {
     }
   };
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-      }
-      if (reconnectTimeoutRef.current) {
-        clearTimeout(reconnectTimeoutRef.current);
-      }
+      if (eventSourceRef.current) eventSourceRef.current.close();
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current);
     };
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#09090b] text-zinc-100">
-      <div className="max-w-7xl mx-auto p-4 md:p-8">
-        {/* Header */}
-        <header className="mb-8">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="p-2 rounded-lg bg-primary/20">
-              <Zap className="w-6 h-6 text-primary" />
+    <TooltipProvider>
+      <div className="min-h-screen bg-[#09090b] text-zinc-100">
+        <div className="max-w-7xl mx-auto p-4 md:p-8">
+          <header className="mb-8">
+            <div className="flex items-center gap-3 mb-2">
+              <div className="p-2 rounded-lg bg-primary/20">
+                <Zap className="w-6 h-6 text-primary" />
+              </div>
+              <h1 className="text-4xl font-bold tracking-tight text-zinc-100">MARS</h1>
             </div>
-            <h1 className="text-4xl font-bold tracking-tight text-zinc-100">
-              MARS
-            </h1>
-          </div>
-          <p className="text-zinc-400 text-sm ml-14">
-            Multi-Agent Research System — Deep-dive research powered by AI agents
-          </p>
-        </header>
+            <p className="text-zinc-400 text-sm ml-14">
+              Multi-Agent Research System — Deep-dive research powered by AI agents
+            </p>
+          </header>
 
-        <Navigation />
+          <Navigation />
 
-        {/* Input Section */}
-        <Card className="bg-zinc-900 border-zinc-800 mb-8">
-          <CardContent className="pt-6">
-            <div className="flex flex-col sm:flex-row gap-4">
-              <div className="flex-1">
-                <label className="text-sm text-zinc-400 mb-2 block">Research Topic</label>
-                <Input
-                  value={topic}
-                  onChange={(e) => setTopic(e.target.value)}
-                  placeholder="Enter a complex topic to research..."
-                  className="bg-zinc-950 border-zinc-700 text-zinc-100 placeholder:text-zinc-600 h-12"
+          {/* Templates */}
+          {!isResearching && <TemplatesGrid onSelectTemplate={handleSelectTemplate} />}
+
+          {/* Input Section */}
+          <Card className="bg-zinc-900 border-zinc-800 mb-8">
+            <CardContent className="pt-6">
+              <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1">
+                  <label className="text-sm text-zinc-400 mb-2 block">Research Topic</label>
+                  <Input
+                    value={topic}
+                    onChange={(e) => setTopic(e.target.value)}
+                    placeholder="Enter a complex topic to research..."
+                    className="bg-zinc-950 border-zinc-700 text-zinc-100 placeholder:text-zinc-600 h-12"
+                    disabled={isResearching}
+                    data-testid="input-topic"
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button
+                    onClick={startResearch}
+                    disabled={isResearching || !topic.trim()}
+                    className="h-12 px-8 bg-primary hover:bg-primary/90 text-white font-medium"
+                    data-testid="btn-start-research"
+                  >
+                    {isResearching ? (
+                      <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Researching...</>
+                    ) : (
+                      <><Play className="w-4 h-4 mr-2" />Start Research</>
+                    )}
+                  </Button>
+                </div>
+              </div>
+              
+              {/* Fast Mode Toggle */}
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-zinc-800">
+                <div className="flex items-center gap-3">
+                  <Rocket className={`w-4 h-4 ${fastMode ? 'text-primary' : 'text-zinc-500'}`} />
+                  <div>
+                    <Label htmlFor="fast-mode" className="text-sm text-zinc-300 cursor-pointer">
+                      Fast Mode
+                    </Label>
+                    <p className="text-xs text-zinc-500">
+                      {fastMode ? '~4-5x faster with GPT-4o Mini and focused prompts' : 'Comprehensive research with GPT-5.2 (slower)'}
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  id="fast-mode"
+                  checked={fastMode}
+                  onCheckedChange={setFastMode}
                   disabled={isResearching}
-                  data-testid="input-topic"
+                  data-testid="switch-fast-mode"
                 />
               </div>
-              <div className="flex items-end">
-                <Button
-                  onClick={startResearch}
-                  disabled={isResearching || !topic.trim()}
-                  className="h-12 px-8 bg-primary hover:bg-primary/90 text-white font-medium"
-                  data-testid="btn-start-research"
-                >
-                  {isResearching ? (
-                    <>
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      Researching...
-                    </>
-                  ) : (
-                    <>
-                      <Play className="w-4 h-4 mr-2" />
-                      Start Research
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            </CardContent>
+          </Card>
 
-        {/* Process Flow */}
-        <ProcessFlow currentStep={currentStep} progress={progress} />
+          <ProcessFlow currentStep={currentStep} progress={progress} />
 
-        {/* Agent Cards Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <AgentCard
-            title="Lead Researcher"
-            icon={Search}
-            color="#0ea5e9"
-            status={agentStatus.researcher}
-            logs={agentLogs.researcher}
-            description="Finding credible sources"
-            testId="agent-card-researcher"
-          />
-          <AgentCard
-            title="Fact-Checker"
-            icon={ShieldAlert}
-            color="#f97316"
-            status={agentStatus.fact_checker}
-            logs={agentLogs.fact_checker}
-            description="Aggressive scrutiny mode"
-            testId="agent-card-fact-checker"
-          />
-          <AgentCard
-            title="Technical Writer"
-            icon={PenTool}
-            color="#10b981"
-            status={agentStatus.writer}
-            logs={agentLogs.writer}
-            description="Synthesizing final report"
-            testId="agent-card-writer"
-          />
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <AgentCard
+              title="Lead Researcher"
+              icon={Search}
+              color="#0ea5e9"
+              status={agentStatus.researcher}
+              logs={agentLogs.researcher}
+              description="Finding credible sources"
+              testId="agent-card-researcher"
+            />
+            <AgentCard
+              title="Fact-Checker"
+              icon={ShieldAlert}
+              color="#f97316"
+              status={agentStatus.fact_checker}
+              logs={agentLogs.fact_checker}
+              description="Aggressive scrutiny mode"
+              testId="agent-card-fact-checker"
+            />
+            <AgentCard
+              title="Technical Writer"
+              icon={PenTool}
+              color="#10b981"
+              status={agentStatus.writer}
+              logs={agentLogs.writer}
+              description="Synthesizing final report"
+              testId="agent-card-writer"
+            />
+          </div>
+
+          <ResultsPanel session={currentSession} isVisible={currentStep === 3 && currentSession !== null} />
+
+          <footer className="mt-12 pt-6 border-t border-zinc-800 text-center">
+            <p className="text-xs text-zinc-600">
+              Powered by CrewAI + GPT-5.2 Thinking • Sequential Process Architecture
+            </p>
+          </footer>
         </div>
-
-        {/* Results Panel */}
-        <ResultsPanel 
-          session={currentSession} 
-          isVisible={currentStep === 3 && currentSession !== null}
-        />
-
-        {/* Footer */}
-        <footer className="mt-12 pt-6 border-t border-zinc-800 text-center">
-          <p className="text-xs text-zinc-600">
-            Powered by CrewAI + GPT-5.2 Thinking • Sequential Process Architecture
-          </p>
-        </footer>
+        <Toaster position="bottom-right" theme="dark" />
       </div>
-      <Toaster position="bottom-right" theme="dark" />
-    </div>
+    </TooltipProvider>
   );
 };
 
