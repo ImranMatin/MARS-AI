@@ -1200,8 +1200,14 @@ async def start_research(request: ResearchRequest, current_user: dict = Depends(
     return {"session_id": session.id, "topic": request.topic, "status": "started", "fast_mode": request.fast_mode}
 
 @api_router.get("/research/stream/{session_id}")
-async def stream_research(session_id: str):
-    """Stream research events via SSE"""
+async def stream_research(session_id: str, current_user: dict = Depends(get_current_user)):
+    """Stream research events via SSE (auth required, owner or admin only)"""
+    # Verify ownership
+    session = await db.research_sessions.find_one({"id": session_id}, {"_id": 0, "user_id": 1})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if current_user.get("role") != "admin" and session.get("user_id") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
     async def event_generator():
         queue = asyncio.Queue()
         
@@ -1254,19 +1260,28 @@ async def stream_research(session_id: str):
     )
 
 @api_router.get("/research/{session_id}")
-async def get_research_session(session_id: str):
-    """Get research session by ID"""
+async def get_research_session(session_id: str, current_user: dict = Depends(get_current_user)):
+    """Get research session by ID (owner or admin only)"""
     session = await db.research_sessions.find_one({"id": session_id}, {"_id": 0})
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    if current_user.get("role") != "admin" and session.get("user_id") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
+    return session
+
+async def _get_session_for_user(session_id: str, current_user: dict):
+    """Helper: fetch session and enforce ownership"""
+    session = await db.research_sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if current_user.get("role") != "admin" and session.get("user_id") != current_user["id"]:
+        raise HTTPException(status_code=403, detail="Access denied")
     return session
 
 @api_router.get("/research/{session_id}/export/markdown")
-async def export_markdown(session_id: str):
+async def export_markdown(session_id: str, current_user: dict = Depends(get_current_user)):
     """Export research session as Markdown"""
-    session = await db.research_sessions.find_one({"id": session_id}, {"_id": 0})
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    session = await _get_session_for_user(session_id, current_user)
     
     markdown_content = generate_markdown_report(session)
     
@@ -1279,11 +1294,9 @@ async def export_markdown(session_id: str):
     )
 
 @api_router.get("/research/{session_id}/export/json")
-async def export_json(session_id: str):
+async def export_json(session_id: str, current_user: dict = Depends(get_current_user)):
     """Export research session as JSON"""
-    session = await db.research_sessions.find_one({"id": session_id}, {"_id": 0})
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    session = await _get_session_for_user(session_id, current_user)
     
     return Response(
         content=json.dumps(session, indent=2, default=str),
@@ -1294,11 +1307,9 @@ async def export_json(session_id: str):
     )
 
 @api_router.get("/research/{session_id}/export/pdf")
-async def export_pdf(session_id: str):
+async def export_pdf(session_id: str, current_user: dict = Depends(get_current_user)):
     """Export research session as PDF"""
-    session = await db.research_sessions.find_one({"id": session_id}, {"_id": 0})
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    session = await _get_session_for_user(session_id, current_user)
     
     try:
         pdf_content = generate_pdf_report(session)
@@ -1314,11 +1325,9 @@ async def export_pdf(session_id: str):
         raise HTTPException(status_code=500, detail="Failed to generate PDF")
 
 @api_router.get("/research/{session_id}/export/latex")
-async def export_latex(session_id: str):
+async def export_latex(session_id: str, current_user: dict = Depends(get_current_user)):
     """Export research session as editable LaTeX (.tex)"""
-    session = await db.research_sessions.find_one({"id": session_id}, {"_id": 0})
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    session = await _get_session_for_user(session_id, current_user)
     
     try:
         latex_content = generate_latex_report(session)
@@ -1334,11 +1343,9 @@ async def export_latex(session_id: str):
         raise HTTPException(status_code=500, detail="Failed to generate LaTeX")
 
 @api_router.get("/research/{session_id}/export/docx")
-async def export_docx(session_id: str):
+async def export_docx(session_id: str, current_user: dict = Depends(get_current_user)):
     """Export research session as editable Word document (.docx)"""
-    session = await db.research_sessions.find_one({"id": session_id}, {"_id": 0})
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    session = await _get_session_for_user(session_id, current_user)
     
     try:
         docx_content = generate_docx_report(session)

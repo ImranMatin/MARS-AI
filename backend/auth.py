@@ -171,7 +171,11 @@ def make_get_current_user(db):
             payload = jwt.decode(token, get_jwt_secret(), algorithms=[JWT_ALGORITHM])
             if payload.get("type") != "access":
                 raise HTTPException(status_code=401, detail="Invalid token type")
-            user = await db.users.find_one({"_id": ObjectId(payload["sub"])})
+            try:
+                user_oid = ObjectId(payload["sub"])
+            except Exception:
+                raise HTTPException(status_code=401, detail="Invalid token subject")
+            user = await db.users.find_one({"_id": user_oid})
             if not user:
                 raise HTTPException(status_code=401, detail="User not found")
             user["id"] = str(user["_id"])
@@ -257,7 +261,8 @@ def create_auth_router(db, get_frontend_url):
         }
     
     @router.post("/logout")
-    async def logout(response: Response, current_user: dict = Depends(get_current_user)):
+    async def logout(response: Response):
+        # Always clear cookies, even if token is invalid/expired
         response.delete_cookie("access_token", path="/")
         response.delete_cookie("refresh_token", path="/")
         return {"message": "Logged out"}

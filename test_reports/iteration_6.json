@@ -1,0 +1,41 @@
+{
+  "summary": "Iteration 6 - Verified new auth features: landing page, JWT register/login/logout/me, forgot/reset password, protected routes, and user-scoped research. Backend: 17/17 pytest tests PASSED in test_auth_flows.py (100%). Frontend: Playwright end-to-end verified landing hero+Vision+Mission cards, unauth redirect from /dashboard and /history to /login, registration creates user and lands on /dashboard, UserMenu shows name and logout returns to /, admin login works, forgot-password success screen renders, /reset-password without token shows 'Invalid reset link' and with token shows form, wrong password shows 'Invalid email or password' error.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/register", "issue": "pydantic EmailStr rejects .test/.local TLDs - not a bug per se, but test emails must use example.com"},
+      {"endpoint": "app.on_event(shutdown/startup)", "issue": "FastAPI on_event deprecated; use lifespan handler (carryover)"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Landing footer", "issues": ["Footer still says 'Powered by CrewAI + GPT-5.2 Thinking' but Fast Mode uses gpt-4o-mini (carryover from iter 5)"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth_flows.py",
+    "/app/test_reports/pytest/pytest_auth_flows.xml"
+  ],
+  "action_items": [
+    "(Optional) Migrate FastAPI on_event to lifespan handler",
+    "(Optional) Update landing footer copy to reflect actual model used"
+  ],
+  "critical_code_review_comments": [
+    "auth.py: get_current_user uses ObjectId(payload['sub']) but never handles InvalidId exception - malformed sub would raise bson.errors.InvalidId as 500 rather than 401.",
+    "auth.py logout endpoint requires authentication (Depends(get_current_user)) - if access_token expired, logout returns 401 and cookies never clear. Consider clearing cookies regardless.",
+    "server.py get_research_session (GET /research/{id}) is NOT protected - any user (or anon) can fetch any session by ID including other users' data. Export endpoints (markdown/json/pdf/latex/docx) similarly unauthenticated.",
+    "server.py: SSE /research/stream/{session_id} has no auth and no ownership check.",
+    "Cookies use samesite='none' + secure=true which requires HTTPS - works on preview but will break on plain http localhost dev.",
+    "App.js still monolithic (~1360 lines); LandingPage was extracted but Dashboard/HistoryPage remain in App.js."
+  ],
+  "updated_files": ["/app/backend/tests/test_auth_flows.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@mars.ai / Admin@2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "test_auth_flows.py creates several test_<uuid>@example.com users on each run. No cleanup.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Auth uses httpOnly cookies (access_token 60m + refresh_token 7d) with samesite='none' secure=true. All /api/auth/* endpoints tested and working. Admin seed idempotent (updates password if changed). Bcrypt hash. Test emails MUST use example.com (pydantic EmailStr rejects .test/.local). CRITICAL SECURITY GAP: GET /api/research/{session_id}, GET /api/research/{session_id}/export/*, and GET /api/research/stream/{session_id} are NOT auth-protected, so any user with a session_id can read/export another user's research. Only POST /api/research/start, GET /api/research (list), and DELETE /api/research/{id} enforce auth+scoping. This should be flagged to E1 as high-priority.",
+  "rca of the issue": "N/A - all requested features working. Security gaps in read/export/stream endpoints are pre-existing (not part of new auth wiring)."
+}
