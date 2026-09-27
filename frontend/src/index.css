@@ -9,68 +9,128 @@ body {
     font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-size: 16px;
+    transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 code {
     font-family: 'JetBrains Mono', source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
 }
 
-@layer base {
-    :root {
-        --background: 240 10% 3.9%;
-        --foreground: 0 0% 98%;
-        --card: 240 10% 3.9%;
-        --card-foreground: 0 0% 98%;
-        --popover: 240 10% 3.9%;
-        --popover-foreground: 0 0% 98%;
-        --primary: 142 76% 36%;
-        --primary-foreground: 0 0% 98%;
-        --secondary: 240 3.7% 15.9%;
-        --secondary-foreground: 0 0% 98%;
-        --muted: 240 3.7% 15.9%;
-        --muted-foreground: 240 5% 64.9%;
-        --accent: 240 3.7% 15.9%;
-        --accent-foreground: 0 0% 98%;
-        --destructive: 0 62.8% 30.6%;
-        --destructive-foreground: 0 0% 98%;
-        --border: 240 3.7% 15.9%;
-        --input: 240 3.7% 15.9%;
-        --ring: 142 76% 36%;
-        --chart-1: 220 70% 50%;
-        --chart-2: 160 60% 45%;
-        --chart-3: 30 80% 55%;
-        --chart-4: 280 65% 60%;
-        --chart-5: 340 75% 55%;
-        --radius: 0.5rem;
-    }
+/* ===== DARK MODE (Navy Blue) - Default ===== */
+:root, html.dark-mode {
+    /* Navy Blue backgrounds */
+    --background-1: #0a1428;      /* Deep navy */
+    --surface-1: #142244;          /* Elevated navy */
+    --surface-2: #1e2f5c;          /* Higher elevation */
+    --terminal-bg: #050b1a;        /* Darker navy for terminals */
+    
+    /* Borders */
+    --border-1: #1e3562;
+    --border-2: #2d4a7d;
+    
+    /* Text */
+    --foreground-1: #f0f4ff;       /* Almost white with slight blue tint */
+    --muted-1: #a3b0cc;
+    --muted-2: #6b7a9e;
+    
+    /* Shadcn variables mapped to navy palette */
+    --background: 220 51% 10%;      /* #0a1428 */
+    --foreground: 220 100% 97%;
+    --card: 220 51% 17%;            /* #142244 */
+    --card-foreground: 220 100% 97%;
+    --popover: 220 51% 17%;
+    --popover-foreground: 220 100% 97%;
+    --primary: 142 76% 46%;         /* Emerald green */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 40% 24%;
+    --secondary-foreground: 220 100% 97%;
+    --muted: 220 40% 24%;
+    --muted-foreground: 220 15% 65%;
+    --accent: 220 40% 24%;
+    --accent-foreground: 220 100% 97%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 45% 25%;
+    --input: 220 45% 25%;
+    --ring: 142 76% 46%;
+    --radius: 0.5rem;
 }
 
+/* ===== LIGHT MODE ===== */
+html.light-mode {
+    /* Light backgrounds */
+    --background-1: #f8fafc;       /* Very light gray */
+    --surface-1: #ffffff;           /* White */
+    --surface-2: #f1f5f9;           /* Slight gray */
+    --terminal-bg: #1e293b;         /* Keep terminal dark for readability */
+    
+    /* Borders */
+    --border-1: #e2e8f0;
+    --border-2: #cbd5e1;
+    
+    /* Text */
+    --foreground-1: #0f172a;        /* Very dark navy */
+    --muted-1: #64748b;
+    --muted-2: #94a3b8;
+    
+    /* Shadcn variables */
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 11%;
+    --primary: 142 76% 36%;         /* Deeper green for contrast */
+    --primary-foreground: 0 0% 100%;
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 142 76% 36%;
+}
+
+/* Utility classes for theme-aware colors */
+.bg-background-1 { background-color: var(--background-1); }
+.bg-surface-1 { background-color: var(--surface-1); }
+.bg-surface-2 { background-color: var(--surface-2); }
+.bg-terminal-bg { background-color: var(--terminal-bg); }
+.text-foreground-1 { color: var(--foreground-1); }
+.text-muted-1 { color: var(--muted-1); }
+.text-muted-2 { color: var(--muted-2); }
+.border-border-1 { border-color: var(--border-1); }
+.border-border-2 { border-color: var(--border-2); }
+
+/* Terminal text should always be light on dark terminal bg */
+.bg-terminal-bg,
+[class*="bg-terminal-bg"] .text-foreground-1 {
+    color: #f0f4ff !important;
+}
+
+/* Agent-specific colors */
+.text-researcher { color: #0ea5e9; }
+.text-fact-checker { color: #f97316; }
+.text-writer { color: #10b981; }
+
 @layer base {
-    * {
-        @apply border-border;
-    }
+    * { @apply border-border; }
     body {
-        @apply bg-background text-foreground;
+        background-color: var(--background-1);
+        color: var(--foreground-1);
     }
 }
 
 /* Custom scrollbar for terminal */
-.terminal-scroll::-webkit-scrollbar {
-    width: 6px;
-}
-
-.terminal-scroll::-webkit-scrollbar-track {
-    background: #18181b;
-}
-
-.terminal-scroll::-webkit-scrollbar-thumb {
-    background: #3f3f46;
-    border-radius: 3px;
-}
-
-.terminal-scroll::-webkit-scrollbar-thumb:hover {
-    background: #52525b;
-}
+.terminal-scroll::-webkit-scrollbar { width: 6px; }
+.terminal-scroll::-webkit-scrollbar-track { background: var(--terminal-bg); }
+.terminal-scroll::-webkit-scrollbar-thumb { background: #2d4a7d; border-radius: 3px; }
+.terminal-scroll::-webkit-scrollbar-thumb:hover { background: #3d5a9d; }
 
 /* Tracing beam effect */
 .tracing-beam {
@@ -79,41 +139,73 @@ code {
     animation: trace 3s linear infinite;
 }
 
-/* Scanlines effect (subtle) */
-.scanlines::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(
-        to bottom,
-        rgba(255, 255, 255, 0) 0%,
-        rgba(255, 255, 255, 0) 50%,
-        rgba(0, 0, 0, 0.05) 50%,
-        rgba(0, 0, 0, 0.05) 100%
-    );
-    background-size: 100% 4px;
-    pointer-events: none;
-    opacity: 0.3;
+@keyframes trace {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Terminal cursor blink */
+.terminal-cursor {
+    display: inline-block;
+    width: 8px;
+    height: 16px;
+    background: currentColor;
+    animation: blink 1s step-end infinite;
+}
+
+@keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+@keyframes pulse-glow {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.6; }
+}
+
+.animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
 }
 
 /* Glow effects */
-.glow-researcher {
-    box-shadow: 0 0 20px -5px #0ea5e9;
+.glow-researcher { box-shadow: 0 0 30px -5px rgba(14, 165, 233, 0.5); }
+.glow-fact-checker { box-shadow: 0 0 30px -5px rgba(249, 115, 22, 0.5); }
+.glow-writer { box-shadow: 0 0 30px -5px rgba(16, 185, 129, 0.5); }
+
+/* Line clamp utility */
+.line-clamp-1 {
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
-.glow-fact-checker {
-    box-shadow: 0 0 20px -5px #f97316;
+.line-clamp-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
 }
 
-.glow-writer {
-    box-shadow: 0 0 20px -5px #10b981;
+/* Smooth theme transition */
+* {
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.15s ease;
+}
+
+/* Card hover animations */
+.card-hover {
+    transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.card-hover:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 20px 40px -20px rgba(0, 0, 0, 0.4);
 }
 
 @layer base {
     [data-debug-wrapper="true"] {
         display: contents !important;
     }
-
     [data-debug-wrapper="true"] > * {
         margin-left: inherit;
         margin-right: inherit;

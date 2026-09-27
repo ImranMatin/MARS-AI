@@ -8,6 +8,7 @@ import re
 import logging
 import json
 import asyncio
+import httpx
 from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
@@ -22,6 +23,9 @@ from reportlab.lib.units import inch
 from reportlab.lib.colors import HexColor
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, PageBreak
 from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
+from docx import Document
+from docx.shared import Pt, RGBColor, Inches
+from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -120,9 +124,19 @@ class StatusCheck(BaseModel):
 class StatusCheckCreate(BaseModel):
     client_name: str
 
+class AgentConfig(BaseModel):
+    """Custom agent configuration"""
+    role: Optional[str] = None
+    goal: Optional[str] = None
+    backstory: Optional[str] = None
+    expertise: Optional[str] = None  # e.g., "AI/ML", "Finance", "Healthcare"
+
 class ResearchRequest(BaseModel):
     topic: str
     fast_mode: bool = True  # Fast mode by default
+    researcher_config: Optional[AgentConfig] = None
+    fact_checker_config: Optional[AgentConfig] = None
+    writer_config: Optional[AgentConfig] = None
 
 class ResearchSession(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -200,28 +214,108 @@ def score_source_credibility(url: str, title: str = "") -> dict:
     return {"score": score, "level": level, "reasons": reasons}
 
 def extract_and_score_sources(text: str) -> List[dict]:
-    """Extract URLs from text and score their credibility"""
+    """Extract URLs from text and score their credibility.
+    Handles markdown links [text](url), plain URLs, and cleans trailing punctuation."""
     if not text:
         return []
     
-    # Extract URLs using regex
-    url_pattern = r'https?://[^\s\)\]\}\>\"\']+'
-    urls = re.findall(url_pattern, text)
+    all_urls = []
     
-    # Deduplicate
-    unique_urls = list(dict.fromkeys(urls))[:10]  # Max 10 sources
+    # First: extract markdown-style links [text](url)
+    md_link_pattern = r'\[([^\]]+)\]\((https?://[^\)]+)\)'
+    md_matches = re.findall(md_link_pattern, text)
+    for title, url in md_matches:
+        all_urls.append((url, title))
+    
+    # Remove markdown links from text to avoid double-counting
+    text_no_md = re.sub(md_link_pattern, '', text)
+    
+    # Then: extract plain URLs (not inside markdown syntax)
+    plain_url_pattern = r'https?://[^\s\)\]\}\>\"\'\<,]+'
+    plain_urls = re.findall(plain_url_pattern, text_no_md)
+    for url in plain_urls:
+        all_urls.append((url, ""))
+    
+    # Deduplicate by URL, keeping title
+    seen = {}
+    for url, title in all_urls:
+        # Clean trailing punctuation
+        clean_url = url.rstrip('.,;:!?)\'"')
+        # Skip if URL is too short or invalid
+        if len(clean_url) < 10 or '.' not in clean_url:
+            continue
+        if clean_url not in seen:
+            seen[clean_url] = title
+    
+    # Limit to top 10
+    unique_urls = list(seen.items())[:10]
     
     sources = []
-    for url in unique_urls:
-        # Clean URL
-        url = url.rstrip('.,;:!?')
+    for url, title in unique_urls:
         credibility = score_source_credibility(url)
         sources.append({
             "url": url,
+            "title": title if title else None,
             "credibility_score": credibility["score"],
             "credibility_level": credibility["level"],
-            "reasons": credibility["reasons"]
+            "reasons": credibility["reasons"],
+            "verified": None,  # Will be set by verify_sources
+            "verified_url": None,  # Final URL after redirects
+            "status_code": None
         })
+    
+    return sources
+
+async def verify_url(url: str, client: httpx.AsyncClient) -> dict:
+    """Verify a URL is accessible and follow redirects"""
+    try:
+        # Try HEAD first (faster), fallback to GET if not allowed
+        response = await client.head(url, follow_redirects=True, timeout=8.0)
+        if response.status_code == 405 or response.status_code >= 500:
+            # Some servers don't allow HEAD, try GET
+            response = await client.get(url, follow_redirects=True, timeout=8.0)
+        
+        final_url = str(response.url)
+        status = response.status_code
+        
+        return {
+            "verified": 200 <= status < 400,
+            "verified_url": final_url,
+            "status_code": status
+        }
+    except httpx.TimeoutException:
+        return {"verified": False, "verified_url": None, "status_code": 0, "error": "timeout"}
+    except Exception as e:
+        return {"verified": False, "verified_url": None, "status_code": 0, "error": str(e)[:100]}
+
+async def verify_sources(sources: List[dict]) -> List[dict]:
+    """Verify all sources in parallel"""
+    if not sources:
+        return sources
+    
+    async with httpx.AsyncClient(
+        headers={'User-Agent': 'Mozilla/5.0 (compatible; MARS-Research-Bot/1.0)'},
+        follow_redirects=True
+    ) as client:
+        tasks = [verify_url(src['url'], client) for src in sources]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+    
+    for src, result in zip(sources, results):
+        if isinstance(result, Exception):
+            src['verified'] = False
+            src['status_code'] = 0
+        else:
+            src['verified'] = result.get('verified', False)
+            src['verified_url'] = result.get('verified_url')
+            src['status_code'] = result.get('status_code', 0)
+            # If we got a redirect to a different URL, use it
+            if src['verified_url'] and src['verified_url'] != src['url']:
+                # Re-score based on final URL
+                new_credibility = score_source_credibility(src['verified_url'])
+                if new_credibility['score'] != src['credibility_score']:
+                    src['credibility_score'] = new_credibility['score']
+                    src['credibility_level'] = new_credibility['level']
+                    src['reasons'] = new_credibility['reasons'] + [f"Redirected from original URL"]
     
     return sources
 
@@ -279,7 +373,9 @@ async def update_progress(session_id: str, progress: int, current_agent: str = N
     )
     await send_event(session_id, "progress", current_agent or "system", f"Progress: {progress}%", {"progress": progress, "current_agent": current_agent})
 
-async def run_research_crew(session_id: str, topic: str, fast_mode: bool = True):
+async def run_research_crew(session_id: str, topic: str, fast_mode: bool = True, 
+                            researcher_config: dict = None, fact_checker_config: dict = None, 
+                            writer_config: dict = None):
     """Run the research crew with streaming updates - OPTIMIZED for speed"""
     try:
         await send_event(session_id, "status", "system", "Initializing research crew...", {"status": "starting"})
@@ -292,7 +388,6 @@ async def run_research_crew(session_id: str, topic: str, fast_mode: bool = True)
         )
 
         # SPEED OPTIMIZATION: Use gpt-4o-mini for faster responses in fast mode
-        # gpt-5-mini requires reasoning and only temperature=1, which is slow
         model_name = "gpt-4o-mini" if fast_mode else "gpt-5.2"
         
         llm = LLM(
@@ -306,39 +401,60 @@ async def run_research_crew(session_id: str, topic: str, fast_mode: bool = True)
         await send_event(session_id, "agent_start", "researcher", "Lead Researcher starting analysis...", {"status": "active"})
         await update_progress(session_id, 10, "researcher")
 
-        # AGENT 1: Lead Researcher - CONCISE
-        researcher = Agent(
-            role='Lead Researcher',
-            goal=f'Find {3 if fast_mode else 5} credible sources on: {topic}. Be concise and focused.',
-            backstory='''You are a fast, efficient research analyst. You quickly identify credible sources 
-            and extract key findings without unnecessary elaboration. You always cite URLs.''',
-            verbose=False,  # Reduced verbosity for speed
-            allow_delegation=False,
-            llm=llm,
-            max_iter=2  # Limit iterations for speed
-        )
+        # Helper to build agent with custom config
+        def _agent_field(config, key, default):
+            if config and config.get(key):
+                return config[key]
+            return default
+        
+        # Apply expertise context if provided
+        expertise_r = researcher_config.get('expertise') if researcher_config else None
+        expertise_fc = fact_checker_config.get('expertise') if fact_checker_config else None
+        expertise_w = writer_config.get('expertise') if writer_config else None
+        
+        expertise_suffix_r = f' Focus your research using expertise in {expertise_r}.' if expertise_r else ''
+        expertise_suffix_fc = f' Apply {expertise_fc} domain expertise in your critique.' if expertise_fc else ''
+        expertise_suffix_w = f' Write from a {expertise_w} subject-matter perspective.' if expertise_w else ''
 
-        # AGENT 2: Professional Critic - AGGRESSIVE but FAST
-        fact_checker = Agent(
-            role='Professional Critic & Fact-Checker',
-            goal=f'''Quickly identify at least ONE contradiction, bias, or error in research on {topic}.
-            Be direct and concise.''',
-            backstory='''You are an aggressive fact-checker. You quickly spot flaws, biases, and 
-            contradictions. Your motto: "Trust nothing, verify everything." You MUST find at least 
-            one issue before the writer proceeds.''',
+        # AGENT 1: Lead Researcher
+        researcher = Agent(
+            role=_agent_field(researcher_config, 'role', 'Lead Researcher'),
+            goal=_agent_field(researcher_config, 'goal', 
+                f'Find {3 if fast_mode else 5} credible sources on: {topic}. Be concise and focused.{expertise_suffix_r}'),
+            backstory=_agent_field(researcher_config, 'backstory',
+                f'''You are a fast, efficient research analyst. You quickly identify credible sources 
+                and extract key findings without unnecessary elaboration. You always cite URLs.{expertise_suffix_r}'''),
             verbose=False,
             allow_delegation=False,
             llm=llm,
             max_iter=2
         )
 
-        # AGENT 3: Senior Technical Writer - FAST SYNTHESIS
+        # AGENT 2: Professional Critic
+        fact_checker = Agent(
+            role=_agent_field(fact_checker_config, 'role', 'Professional Critic & Fact-Checker'),
+            goal=_agent_field(fact_checker_config, 'goal',
+                f'''Quickly identify at least ONE contradiction, bias, or error in research on {topic}.
+                Be direct and concise.{expertise_suffix_fc}'''),
+            backstory=_agent_field(fact_checker_config, 'backstory',
+                f'''You are an aggressive fact-checker. You quickly spot flaws, biases, and 
+                contradictions. Your motto: "Trust nothing, verify everything." You MUST find at least 
+                one issue before the writer proceeds.{expertise_suffix_fc}'''),
+            verbose=False,
+            allow_delegation=False,
+            llm=llm,
+            max_iter=2
+        )
+
+        # AGENT 3: Senior Technical Writer
         writer = Agent(
-            role='Senior Technical Writer',
-            goal=f'''Write a {"300" if fast_mode else "500"}-word summary on {topic} that addresses 
-            the fact-checker's concerns.''',
-            backstory='''You are an efficient technical writer. You synthesize research quickly 
-            while acknowledging limitations and contradictions raised by fact-checkers.''',
+            role=_agent_field(writer_config, 'role', 'Senior Technical Writer'),
+            goal=_agent_field(writer_config, 'goal',
+                f'''Write a {"300" if fast_mode else "500"}-word summary on {topic} that addresses 
+                the fact-checker's concerns.{expertise_suffix_w}'''),
+            backstory=_agent_field(writer_config, 'backstory',
+                f'''You are an efficient technical writer. You synthesize research quickly 
+                while acknowledging limitations and contradictions raised by fact-checkers.{expertise_suffix_w}'''),
             verbose=False,
             allow_delegation=False,
             llm=llm,
@@ -432,8 +548,16 @@ async def run_research_crew(session_id: str, topic: str, fast_mode: bool = True)
         fact_checker_output = str(fact_check_task.output) if fact_check_task.output else "Fact-check completed"
         writer_output = str(writing_task.output) if writing_task.output else str(result)
         
-        # Extract and score sources
-        sources = extract_and_score_sources(researcher_output)
+        # Extract and score sources - also search research findings from writer
+        sources = extract_and_score_sources(researcher_output + "\n" + writer_output)
+        
+        # Real-time source verification (checks URLs are accessible, follows redirects)
+        await send_event(session_id, "log", "researcher", f"Verifying {len(sources)} source URLs...")
+        sources = await verify_sources(sources)
+        verified_count = sum(1 for s in sources if s.get('verified'))
+        await send_event(session_id, "log", "researcher", f"Verified {verified_count}/{len(sources)} sources are accessible")
+        
+        # Recalculate credibility after verification
         credibility_score = calculate_overall_credibility(sources)
         
         # Send updates for each agent
@@ -768,6 +892,252 @@ def generate_pdf_report(session: dict) -> bytes:
     buffer.seek(0)
     return buffer.getvalue()
 
+def _latex_escape(text: str) -> str:
+    """Escape special LaTeX characters"""
+    if not text:
+        return ""
+    replacements = {
+        '\\': r'\textbackslash{}',
+        '&': r'\&',
+        '%': r'\%',
+        '$': r'\$',
+        '#': r'\#',
+        '_': r'\_',
+        '{': r'\{',
+        '}': r'\}',
+        '~': r'\textasciitilde{}',
+        '^': r'\textasciicircum{}',
+    }
+    for old, new in replacements.items():
+        text = text.replace(old, new)
+    return text
+
+def generate_latex_report(session: dict) -> str:
+    """Generate an editable LaTeX research paper"""
+    topic = _latex_escape(session.get('topic', 'Unknown Topic'))
+    created_at = session.get('created_at', 'Unknown Date')
+    contradictions = session.get('contradictions_found', [])
+    final_report = _latex_escape(session.get('final_report', 'No report available'))
+    researcher_output = _latex_escape(session.get('researcher_output', ''))
+    fact_checker_output = _latex_escape(session.get('fact_checker_output', ''))
+    sources = session.get('sources', [])
+    credibility_score = session.get('credibility_score', 0) or 0
+    
+    latex = r"""\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{parskip}
+\usepackage{enumitem}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    citecolor=blue
+}
+
+\titleformat{\section}{\Large\bfseries\color{blue!60!black}}{\thesection}{1em}{}
+\titleformat{\subsection}{\large\bfseries\color{gray!60!black}}{\thesubsection}{1em}{}
+
+\title{\textbf{Research Report:} """ + topic + r"""}
+\author{Generated by MARS -- Multi-Agent Research System}
+\date{""" + _latex_escape(created_at) + r"""}
+
+\begin{document}
+
+\maketitle
+
+\begin{center}
+\textbf{Overall Source Credibility Score:} """ + f"{credibility_score}/100" + r"""
+\end{center}
+
+\section{Executive Summary}
+
+""" + final_report + r"""
+
+\section{Source Credibility Analysis}
+
+"""
+    
+    if sources:
+        latex += r"\begin{itemize}[leftmargin=*]" + "\n"
+        for src in sources:
+            url = src.get('url', 'N/A')
+            score = src.get('credibility_score', 0)
+            level = src.get('credibility_level', 'unknown')
+            verified = src.get('verified')
+            verified_url = src.get('verified_url') or url
+            # Use verified_url for the hyperlink so it points to the actual accessible source
+            escaped_url = verified_url.replace('%', r'\%').replace('#', r'\#').replace('&', r'\&').replace('_', r'\_')
+            display_url = _latex_escape(verified_url[:80] + ('...' if len(verified_url) > 80 else ''))
+            verification_status = "Verified" if verified else "Unverified" if verified is False else "Not checked"
+            latex += rf"\item \textbf{{[{score}/100 - {level}]}} \href{{{escaped_url}}}{{{display_url}}} ({verification_status})" + "\n"
+        latex += r"\end{itemize}" + "\n"
+    else:
+        latex += "No sources with URLs found.\n"
+    
+    latex += r"""
+\section{Issues Identified by Fact-Checker}
+
+"""
+    
+    if contradictions:
+        latex += r"\begin{itemize}[leftmargin=*]" + "\n"
+        for item in contradictions:
+            latex += rf"\item {_latex_escape(item)}" + "\n"
+        latex += r"\end{itemize}" + "\n"
+    else:
+        latex += "No major issues identified.\n"
+    
+    latex += r"""
+\newpage
+
+\section{Research Findings}
+
+""" + researcher_output + r"""
+
+\section{Fact-Check Analysis}
+
+""" + fact_checker_output + r"""
+
+\vfill
+
+\hrulefill
+
+\begin{center}
+\textit{Report generated by MARS -- Multi-Agent Research System}
+\end{center}
+
+\end{document}
+"""
+    return latex
+
+def generate_docx_report(session: dict) -> bytes:
+    """Generate an editable Word (.docx) research paper"""
+    doc = Document()
+    
+    # Set document margins
+    for section in doc.sections:
+        section.top_margin = Inches(1)
+        section.bottom_margin = Inches(1)
+        section.left_margin = Inches(1)
+        section.right_margin = Inches(1)
+    
+    topic = session.get('topic', 'Unknown Topic')
+    created_at = session.get('created_at', 'Unknown Date')
+    contradictions = session.get('contradictions_found', [])
+    final_report = session.get('final_report', 'No report available')
+    researcher_output = session.get('researcher_output', '')
+    fact_checker_output = session.get('fact_checker_output', '')
+    sources = session.get('sources', [])
+    credibility_score = session.get('credibility_score', 0) or 0
+    
+    # Title
+    title = doc.add_heading('Research Report', level=0)
+    title.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    
+    subtitle = doc.add_heading(topic, level=1)
+    
+    # Metadata
+    meta = doc.add_paragraph()
+    meta_run = meta.add_run(f'Generated: {created_at}\n')
+    meta_run.font.size = Pt(10)
+    meta_run.font.color.rgb = RGBColor(0x71, 0x71, 0x7a)
+    
+    status_run = meta.add_run(f'Status: {session.get("status", "Unknown").capitalize()}\n')
+    status_run.font.size = Pt(10)
+    status_run.font.color.rgb = RGBColor(0x71, 0x71, 0x7a)
+    
+    cred_para = doc.add_paragraph()
+    cred_run = cred_para.add_run(f'Overall Source Credibility: {credibility_score}/100')
+    cred_run.bold = True
+    cred_run.font.size = Pt(11)
+    if credibility_score >= 70:
+        cred_run.font.color.rgb = RGBColor(0x22, 0xc5, 0x5e)
+    elif credibility_score >= 50:
+        cred_run.font.color.rgb = RGBColor(0xea, 0xb3, 0x08)
+    else:
+        cred_run.font.color.rgb = RGBColor(0xef, 0x44, 0x44)
+    
+    # Executive Summary
+    doc.add_heading('Executive Summary', level=2)
+    for para in final_report.split('\n\n'):
+        if para.strip():
+            p = doc.add_paragraph(para.strip())
+            p.paragraph_format.space_after = Pt(6)
+    
+    # Source Credibility Analysis
+    if sources:
+        doc.add_heading('Source Credibility Analysis', level=2)
+        for src in sources:
+            url = src.get('url', 'N/A')
+            score = src.get('credibility_score', 0)
+            level = src.get('credibility_level', 'unknown')
+            verified = src.get('verified')
+            verified_url = src.get('verified_url') or url
+            
+            p = doc.add_paragraph()
+            score_run = p.add_run(f'[{score}/100 - {level}] ')
+            score_run.bold = True
+            if score >= 70:
+                score_run.font.color.rgb = RGBColor(0x22, 0xc5, 0x5e)
+            elif score >= 50:
+                score_run.font.color.rgb = RGBColor(0xea, 0xb3, 0x08)
+            else:
+                score_run.font.color.rgb = RGBColor(0xef, 0x44, 0x44)
+            
+            url_run = p.add_run(verified_url)
+            url_run.font.size = Pt(9)
+            url_run.font.color.rgb = RGBColor(0x0e, 0xa5, 0xe9)
+            
+            status_text = f' ({"Verified" if verified else "Unverified" if verified is False else "Not checked"})'
+            status_run = p.add_run(status_text)
+            status_run.font.size = Pt(9)
+            status_run.italic = True
+    
+    # Issues Identified
+    if contradictions:
+        doc.add_heading('Issues Identified by Fact-Checker', level=2)
+        for item in contradictions:
+            doc.add_paragraph(item, style='List Bullet')
+    
+    # Page break
+    doc.add_page_break()
+    
+    # Research Findings
+    if researcher_output:
+        doc.add_heading('Research Findings', level=2)
+        for para in researcher_output.split('\n\n'):
+            if para.strip():
+                p = doc.add_paragraph(para.strip())
+                p.paragraph_format.space_after = Pt(6)
+    
+    # Fact-Check Analysis
+    if fact_checker_output:
+        doc.add_heading('Fact-Check Analysis', level=2)
+        for para in fact_checker_output.split('\n\n'):
+            if para.strip():
+                p = doc.add_paragraph(para.strip())
+                p.paragraph_format.space_after = Pt(6)
+    
+    # Footer
+    doc.add_paragraph()
+    footer = doc.add_paragraph()
+    footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    footer_run = footer.add_run('Generated by MARS - Multi-Agent Research System')
+    footer_run.italic = True
+    footer_run.font.size = Pt(9)
+    footer_run.font.color.rgb = RGBColor(0xa1, 0xa1, 0xaa)
+    
+    # Save to buffer
+    buffer = BytesIO()
+    doc.save(buffer)
+    buffer.seek(0)
+    return buffer.getvalue()
+
 # Routes
 @api_router.get("/")
 async def root():
@@ -803,8 +1173,16 @@ async def start_research(request: ResearchRequest):
     doc['created_at'] = doc['created_at'].isoformat()
     await db.research_sessions.insert_one(doc)
     
+    # Convert agent configs to dicts (may be None)
+    researcher_config = request.researcher_config.model_dump(exclude_none=True) if request.researcher_config else None
+    fact_checker_config = request.fact_checker_config.model_dump(exclude_none=True) if request.fact_checker_config else None
+    writer_config = request.writer_config.model_dump(exclude_none=True) if request.writer_config else None
+    
     # Start the research in background
-    asyncio.create_task(run_research_crew(session.id, request.topic, request.fast_mode))
+    asyncio.create_task(run_research_crew(
+        session.id, request.topic, request.fast_mode,
+        researcher_config, fact_checker_config, writer_config
+    ))
     
     return {"session_id": session.id, "topic": request.topic, "status": "started", "fast_mode": request.fast_mode}
 
@@ -921,6 +1299,46 @@ async def export_pdf(session_id: str):
     except Exception as e:
         logger.error(f"PDF generation error: {e}")
         raise HTTPException(status_code=500, detail="Failed to generate PDF")
+
+@api_router.get("/research/{session_id}/export/latex")
+async def export_latex(session_id: str):
+    """Export research session as editable LaTeX (.tex)"""
+    session = await db.research_sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    try:
+        latex_content = generate_latex_report(session)
+        return Response(
+            content=latex_content,
+            media_type="application/x-latex",
+            headers={
+                "Content-Disposition": f"attachment; filename=research-report-{session_id[:8]}.tex"
+            }
+        )
+    except Exception as e:
+        logger.error(f"LaTeX generation error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate LaTeX")
+
+@api_router.get("/research/{session_id}/export/docx")
+async def export_docx(session_id: str):
+    """Export research session as editable Word document (.docx)"""
+    session = await db.research_sessions.find_one({"id": session_id}, {"_id": 0})
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    try:
+        docx_content = generate_docx_report(session)
+        return Response(
+            content=docx_content,
+            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            headers={
+                "Content-Disposition": f"attachment; filename=research-report-{session_id[:8]}.docx"
+            }
+        )
+    except Exception as e:
+        logger.error(f"DOCX generation error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to generate DOCX")
 
 @api_router.get("/research")
 async def get_research_sessions():
