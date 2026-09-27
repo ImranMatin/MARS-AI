@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 5 - Verified NEW features: source verification (verified/verified_url/status_code), custom agent configuration (researcher/fact_checker/writer configs), and LaTeX/DOCX exports. Backend: 11/11 pytest tests PASSED in test_new_features.py (100%), including live research session with custom agent configs, source verification fields presence & correctness, LaTeX \\documentclass structure, DOCX PK signature, and 404 handling. Frontend: Playwright confirms dark-mode navy blue bg (rgb(10,20,40) = #0a1428) is default, theme toggle switches to light-mode and persists via localStorage 'mars-theme', h1=48px (text-5xl) and body=16px, 6 template cards render and click populates topic input, Customize Agents dialog opens with 3 tabs (Researcher/Fact-Checker/Writer) and 4 inputs on active tab, Export dropdown shows 5 formats (PDF, Markdown, JSON, DOCX, LaTeX) grouped into Read-Only and Editable sections.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "app.on_event('shutdown')", "issue": "FastAPI on_event is deprecated; migrate to lifespan handler (carryover from iter 4)"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Footer", "issues": ["Footer still says 'Powered by CrewAI + GPT-5.2 Thinking'; may not match Fast Mode using gpt-4o-mini (carryover)."]},
+      {"screen": "History detail - Export dropdown", "issues": ["Dropdown menu items visually overlap the credibility badges on the right side of source rows when opened (see screenshot). Consider higher z-index or offset for DropdownMenuContent."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_new_features.py",
+    "/app/test_reports/pytest/pytest_new_features.xml"
+  ],
+  "action_items": [
+    "(Optional) Update footer copy to reflect current model",
+    "(Optional) Fix minor z-index/positioning overlap between Export dropdown and credibility badges",
+    "(Optional) Migrate FastAPI shutdown from on_event to lifespan"
+  ],
+  "critical_code_review_comments": [
+    "server.py continues to grow (~1370 lines). Split into routes/, services/, exporters/ modules.",
+    "verify_url httpx calls should ensure a bounded timeout and follow_redirects=True (verify verified_url is captured from response.url).",
+    "LaTeX export should escape special LaTeX characters (%, $, &, _, #, {, }) in topic/report text to avoid compile errors when users actually run pdflatex.",
+    "DOCX export: ensure python-docx output is streamed via BytesIO and Content-Disposition includes proper filename.",
+    "App.js is monolithic; extract ThemeProvider, CustomAgentsDialog, ExportMenu, TemplatesGrid into their own files."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "test_new_features.py fixture creates 1 fast-mode session 'TEST_ Solar energy benefits' with custom agent configs each run.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 7 new features verified end-to-end. Sources returned by /api/research/{id} include verified(bool), verified_url(str), status_code(int). LaTeX export returns text/x-latex with \\documentclass+\\begin{document}+Source Credibility Analysis section. DOCX export returns application/vnd.openxmlformats-officedocument.wordprocessingml.document with PK zip header. Frontend dark navy #0a1428, theme persists in localStorage 'mars-theme' (values: 'dark'|'light'), 6 templates, Customize Agents dialog with tabs (researcher/fact_checker/writer) and inputs input-{agent}-expertise/role/backstory/goal, Export dropdown data-testids: export-pdf, export-markdown, export-json, export-docx, export-latex."
+}
