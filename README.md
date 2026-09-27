@@ -6,7 +6,7 @@
 
 **Deep-dive research automation powered by AI agents**
 
-[![Version](https://img.shields.io/badge/version-1.3.0-22c55e?style=flat-square)](https://github.com/your-org/mars-research-system)
+[![Version](https://img.shields.io/badge/version-1.4.0-22c55e?style=flat-square)](https://github.com/ImranMatin/MARS)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=flat-square&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-61DAFB?style=flat-square&logo=react&logoColor=black)](https://reactjs.org/)
 [![CrewAI](https://img.shields.io/badge/CrewAI-FF6B6B?style=flat-square&logo=openai&logoColor=white)](https://crewai.com/)
@@ -327,6 +327,13 @@ Each source URL is verified in real-time:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/` | Health check |
+| POST | `/api/auth/register` | Register with email + password + name (NEW) |
+| POST | `/api/auth/login` | Login with email + password (NEW) |
+| POST | `/api/auth/logout` | Logout - clears cookies (NEW) |
+| GET | `/api/auth/me` | Get current authenticated user (NEW) |
+| POST | `/api/auth/refresh` | Refresh access token from refresh cookie (NEW) |
+| POST | `/api/auth/forgot-password` | Send password reset email (NEW) |
+| POST | `/api/auth/reset-password` | Reset password with email token (NEW) |
 | GET | `/api/templates` | Get 6 research templates |
 | POST | `/api/research/start` | Start research (optional custom agent configs) |
 | GET | `/api/research/stream/{id}` | SSE stream for real-time updates |
@@ -705,18 +712,31 @@ in the Software without restriction...
 
 | | |
 |---|---|
-| **Version** | 1.3.0 |
+| **Version** | 1.4.0 |
 | **Status** | Production Ready |
 | **Last Updated** | February 2026 |
-| **Maintainers** | MARS Team |
+| **Maintainers** | ImranMatin |
 | **Language** | Python, JavaScript |
 | **Frameworks** | FastAPI, React, CrewAI |
 | **Database** | MongoDB |
+| **Auth** | JWT (httpOnly cookies) + bcrypt |
+| **Email** | Resend (Emergent-managed) |
 | **LLM** | GPT-5.2 / GPT-4o Mini via Emergent |
 
 ### Changelog
 
-#### v1.3.0 (Current)
+#### v1.4.0 (Current)
+- Added public Landing page with Vision, Mission, Features, and CTA sections
+- Added JWT-based custom authentication (register/login/logout)
+- Added Forgot Password flow with 1-hour email reset tokens via Resend
+- Added protected routes (/dashboard and /history require auth)
+- Added per-user session scoping (users only see their own research)
+- Added Admin role (admin@mars.ai) for viewing all sessions
+- Added brute-force protection (5 failed logins = 15 min lockout)
+- Added User Menu with logout in dashboard header
+- Security hardening: all research/export/stream endpoints require auth + ownership
+
+#### v1.3.0
 - **[BUG FIX]** Sources now link to verified/accessible URLs after redirect resolution
 - Added real-time URL verification with parallel httpx requests
 - Added light/dark mode toggle with navy blue dark theme (`#0a1428`)
