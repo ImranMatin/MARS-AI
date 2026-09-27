@@ -1042,7 +1042,7 @@ const Dashboard = () => {
 
           <footer className="mt-12 pt-6 border-t border-zinc-800 text-center">
             <p className="text-xs text-zinc-600">
-              Powered by CrewAI + GPT-5.2 Thinking • Sequential Process Architecture
+              Powered by CrewAI + {fastMode ? 'GPT-4o Mini (Fast Mode)' : 'GPT-5.2 Thinking'} • Sequential Process Architecture
             </p>
           </footer>
         </div>
