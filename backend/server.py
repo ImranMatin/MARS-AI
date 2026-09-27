@@ -1,6 +1,11 @@
-from fastapi import FastAPI, APIRouter, HTTPException
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse, Response
 from dotenv import load_dotenv
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / '.env')
+
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
@@ -9,7 +14,6 @@ import logging
 import json
 import asyncio
 import httpx
-from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 import uuid
@@ -27,8 +31,7 @@ from docx import Document
 from docx.shared import Pt, RGBColor, Inches
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
+from auth import create_auth_router, seed_admin_and_indexes
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -37,6 +40,17 @@ db = client[os.environ['DB_NAME']]
 
 # Create the main app without a prefix
 app = FastAPI()
+
+# Auth router setup
+def get_frontend_url():
+    return os.environ.get("FRONTEND_URL", "http://localhost:3000")
+
+auth_router, get_current_user = create_auth_router(db, get_frontend_url)
+app.include_router(auth_router)
+
+@app.on_event("startup")
+async def on_startup():
+    await seed_admin_and_indexes(db)
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
@@ -1166,19 +1180,18 @@ async def get_status_checks():
     return status_checks
 
 @api_router.post("/research/start")
-async def start_research(request: ResearchRequest):
+async def start_research(request: ResearchRequest, current_user: dict = Depends(get_current_user)):
     """Start a new research session"""
     session = ResearchSession(topic=request.topic)
     doc = session.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
+    doc['user_id'] = current_user["id"]  # Associate with user
     await db.research_sessions.insert_one(doc)
     
-    # Convert agent configs to dicts (may be None)
     researcher_config = request.researcher_config.model_dump(exclude_none=True) if request.researcher_config else None
     fact_checker_config = request.fact_checker_config.model_dump(exclude_none=True) if request.fact_checker_config else None
     writer_config = request.writer_config.model_dump(exclude_none=True) if request.writer_config else None
     
-    # Start the research in background
     asyncio.create_task(run_research_crew(
         session.id, request.topic, request.fast_mode,
         researcher_config, fact_checker_config, writer_config
@@ -1341,15 +1354,20 @@ async def export_docx(session_id: str):
         raise HTTPException(status_code=500, detail="Failed to generate DOCX")
 
 @api_router.get("/research")
-async def get_research_sessions():
-    """Get all research sessions"""
-    sessions = await db.research_sessions.find({}, {"_id": 0}).sort("created_at", -1).to_list(100)
+async def get_research_sessions(current_user: dict = Depends(get_current_user)):
+    """Get all research sessions for the current user"""
+    # Admins see all, users see only their own
+    query = {} if current_user.get("role") == "admin" else {"user_id": current_user["id"]}
+    sessions = await db.research_sessions.find(query, {"_id": 0}).sort("created_at", -1).to_list(100)
     return sessions
 
 @api_router.delete("/research/{session_id}")
-async def delete_research_session(session_id: str):
-    """Delete a research session"""
-    result = await db.research_sessions.delete_one({"id": session_id})
+async def delete_research_session(session_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete a research session (only own sessions unless admin)"""
+    query = {"id": session_id}
+    if current_user.get("role") != "admin":
+        query["user_id"] = current_user["id"]
+    result = await db.research_sessions.delete_one(query)
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Session not found")
     return {"message": "Session deleted successfully"}
@@ -1360,7 +1378,7 @@ app.include_router(api_router)
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=os.environ.get('CORS_ORIGINS', '*').split(','),
+    allow_origins=[get_frontend_url(), "http://localhost:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
 )

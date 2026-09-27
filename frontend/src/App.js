@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef, useCallback, createContext, useContext } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Link, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, useLocation, Navigate, useNavigate } from "react-router-dom";
+import axios from "axios";
+import { AuthProvider, useAuth } from "@/AuthContext";
+import LandingPage from "@/pages/LandingPage";
+import { LoginPage, RegisterPage, ForgotPasswordPage, ResetPasswordPage } from "@/pages/AuthPages";
 import { Toaster } from "@/components/ui/sonner";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
@@ -11,7 +15,7 @@ import {
   TrendingUp, Cpu, FlaskConical, Scale, BarChart3, Target,
   Sparkles, Rocket, Award, Shield, Info, Sun, Moon, Settings,
   UserCog, ExternalLink, FileCode, FileSpreadsheet, CheckCircle,
-  AlertCircle
+  AlertCircle, LogOut, User as UserIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -39,6 +43,64 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL;
 const API = `${BACKEND_URL}/api`;
+
+// Enable credentials on all fetch/axios calls
+axios.defaults.withCredentials = true;
+
+// Fetch wrapper that always sends cookies
+const authFetch = (url, options = {}) => fetch(url, { ...options, credentials: 'include' });
+
+// ============ PROTECTED ROUTE ============
+const ProtectedRoute = ({ children }) => {
+  const { user, loading } = useAuth();
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background-1 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  if (!user) return <Navigate to="/login" replace />;
+  return children;
+};
+
+// ============ USER MENU ============
+const UserMenu = () => {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
+  
+  if (!user) return null;
+  
+  const handleLogout = async () => {
+    await logout();
+    toast.success("Signed out");
+    navigate("/");
+  };
+  
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" data-testid="user-menu">
+          <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center mr-2">
+            <UserIcon className="w-4 h-4 text-primary" />
+          </div>
+          <span className="max-w-[120px] truncate">{user.name || user.email}</span>
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuLabel>
+          <div className="text-xs text-muted-1">Signed in as</div>
+          <div className="text-sm font-medium">{user.email}</div>
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={handleLogout} data-testid="btn-logout">
+          <LogOut className="w-4 h-4 mr-2" />
+          Sign out
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+};
 
 // ============ THEME CONTEXT ============
 const ThemeContext = createContext();
@@ -298,7 +360,7 @@ const ProcessFlow = ({ currentStep, progress }) => {
 const ExportMenu = ({ sessionId, disabled }) => {
   const handleExport = async (format) => {
     try {
-      const response = await fetch(`${API}/research/${sessionId}/export/${format}`);
+      const response = await fetch(`${API}/research/${sessionId}/export/${format}`, { credentials: 'include' });
       if (!response.ok) throw new Error('Export failed');
       
       const blob = await response.blob();
@@ -353,7 +415,7 @@ const ExportMenu = ({ sessionId, disabled }) => {
 const TemplatesGrid = ({ onSelectTemplate }) => {
   const [templates, setTemplates] = useState([]);
   useEffect(() => {
-    fetch(`${API}/templates`)
+    fetch(`${API}/templates`, { credentials: 'include' })
       .then(res => res.json())
       .then(data => setTemplates(data.templates || []))
       .catch(() => {});
@@ -677,8 +739,8 @@ const Navigation = () => {
   return (
     <nav className="flex items-center justify-between mb-8">
       <div className="flex items-center gap-4">
-        <Link to="/">
-          <Button variant={location.pathname === '/' ? 'default' : 'ghost'} size="sm">
+        <Link to="/dashboard">
+          <Button variant={location.pathname === '/dashboard' ? 'default' : 'ghost'} size="sm">
             <Zap className="w-4 h-4 mr-2" /> New Research
           </Button>
         </Link>
@@ -688,7 +750,10 @@ const Navigation = () => {
           </Button>
         </Link>
       </div>
-      <ThemeToggle />
+      <div className="flex items-center gap-2">
+        <ThemeToggle />
+        <UserMenu />
+      </div>
     </nav>
   );
 };
@@ -702,7 +767,7 @@ const HistoryPage = () => {
   const fetchSessions = async () => {
     setLoading(true);
     try {
-      const response = await fetch(`${API}/research`);
+      const response = await fetch(`${API}/research`, { credentials: 'include' });
       if (response.ok) setSessions(await response.json());
     } catch (error) {
       toast.error('Failed to load history');
@@ -713,7 +778,7 @@ const HistoryPage = () => {
 
   const handleDelete = async (sessionId) => {
     try {
-      const response = await fetch(`${API}/research/${sessionId}`, { method: 'DELETE' });
+      const response = await fetch(`${API}/research/${sessionId}`, { method: 'DELETE', credentials: 'include' });
       if (response.ok) {
         toast.success('Session deleted');
         fetchSessions();
@@ -1012,7 +1077,7 @@ const Dashboard = () => {
   const connectToStream = useCallback((sessionId) => {
     if (eventSourceRef.current) eventSourceRef.current.close();
 
-    const eventSource = new EventSource(`${API}/research/stream/${sessionId}`);
+    const eventSource = new EventSource(`${API}/research/stream/${sessionId}`, { withCredentials: true });
     eventSourceRef.current = eventSource;
 
     eventSource.onmessage = (event) => {
@@ -1123,6 +1188,7 @@ const Dashboard = () => {
       const response = await fetch(`${API}/research/start`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(body)
       });
 
@@ -1142,7 +1208,7 @@ const Dashboard = () => {
 
   const fetchSession = async (sessionId) => {
     try {
-      const response = await fetch(`${API}/research/${sessionId}`);
+      const response = await fetch(`${API}/research/${sessionId}`, { credentials: 'include' });
       if (response.ok) setCurrentSession(await response.json());
     } catch (error) { console.error('Error fetching session:', error); }
   };
@@ -1271,14 +1337,22 @@ const Dashboard = () => {
 function App() {
   return (
     <ThemeProvider>
-      <div className="App">
-        <BrowserRouter>
-          <Routes>
-            <Route path="/" element={<Dashboard />} />
-            <Route path="/history" element={<HistoryPage />} />
-          </Routes>
-        </BrowserRouter>
-      </div>
+      <AuthProvider>
+        <div className="App">
+          <BrowserRouter>
+            <Routes>
+              <Route path="/" element={<LandingPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
+              <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
+              <Route path="/history" element={<ProtectedRoute><HistoryPage /></ProtectedRoute>} />
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
+          </BrowserRouter>
+        </div>
+      </AuthProvider>
     </ThemeProvider>
   );
 }
